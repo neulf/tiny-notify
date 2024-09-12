@@ -1,3 +1,4 @@
+// src/main.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/inotify.h>
@@ -61,7 +62,7 @@ int read_config(char directories[MAX_WATCHES][PATH_MAX]) {
         perror("Error opening config file");
         return -1;
     }
-
+    
     char line[PATH_MAX];
     while (fgets(line, sizeof(line), config_file)) {
         // 去掉换行符
@@ -94,7 +95,7 @@ void clean_old_logs() {
     struct dirent *entry;
     char file_path[PATH_MAX];
     struct stat file_stat;
-    time_t now = time(NULL);
+        time_t now = time(NULL);
     double seconds_in_days = log_retention_days * 24 * 3600;
 
     // 打开日志目录
@@ -116,11 +117,11 @@ void clean_old_logs() {
                     if (remove(file_path) != 0) {
                         perror("Error deleting file");
                     }
-                }
+            }
             } else {
                 perror("stat");
-            }
-        }
+    }
+}
     }
 
     closedir(dir);
@@ -204,14 +205,14 @@ int main() {
             fprintf(log_file, "\"Time\",\"Event\",\"Path\",\"IsDirectory\"\n");
             start_time = current_time;
         }
-
+        
         int i = 0;
         while (i < length) {
             struct inotify_event *event = (struct inotify_event *) &buffer[i];
             char event_desc[256] = "";
 
             // 记录新增文件或目录
-            if (event->mask & IN_CREATE) {
+                if (event->mask & IN_CREATE) {
                 snprintf(event_desc, sizeof(event_desc), "Created %s", (event->mask & IN_ISDIR) ? "directory" : "file");
             }
             // 记录修改的文件
@@ -233,6 +234,9 @@ int main() {
 
             i += EVENT_SIZE + event->len;
         }
+
+        // Clean old logs
+        clean_logs(log_retention_days);
     }
 
     // 清理

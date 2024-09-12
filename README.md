@@ -15,3 +15,12 @@ directory=/home/user/watch1
 directory=/home/user/watch2
 log_retention_days=7
 ```
+
+3. **Build**: use x86_64-linux-musl to compile files.
+   you can execute make like this.
+
+```
+PS C:\Project\Lab\tiny-notify> make
+"C:/Program Files/x86_64-linux-musl/bin/x86_64-linux-musl-gcc.exe" -Wall -I. -o main src/main.c
+PS C:\Project\Lab\tiny-notify> 
+```
