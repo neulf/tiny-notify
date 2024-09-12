@@ -5,7 +5,7 @@ CC = "C:/Program Files/x86_64-linux-musl/bin/x86_64-linux-musl-gcc.exe"
 CFLAGS = -Wall -I.
 SRC = src/main.c
 OBJ = main.o
-TARGET = main
+TARGET = tiny-notify
 
 # 默认目标：编译生成Linux可执行文件
 all: $(TARGET)
