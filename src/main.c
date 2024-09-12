@@ -8,16 +8,20 @@
 #include <limits.h>
 #include <errno.h>
 #include <signal.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define EVENT_BUF_LEN (1024 * (EVENT_SIZE + 16))
-#define CONFIG_FILE "tinynotify.config"
+#define CONFIG_FILE "notify.config"
+#define LOG_DIR "./"  // 日志目录
 #define MAX_WATCHES 1024  // 最大监听路径数
 
 // 文件描述符和监视器描述符
 int fd;
 int wd[MAX_WATCHES];
 int watch_count = 0;
+int log_retention_days = 7;  // 默认日志保留天数
 
 // 信号处理函数，捕获 SIGTERM 信号并清理资源
 void handle_signal(int signal) {
@@ -37,7 +41,7 @@ void get_time_string(char *buffer, size_t size) {
     struct tm *timeinfo;
     time(&rawtime);
     timeinfo = localtime(&rawtime);
-    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", timeinfo);
+    strftime(buffer, size, "%Y-%m-%d_%H-%M-%S", timeinfo);
 }
 
 // 记录事件到日志文件，以 CSV 格式
@@ -50,7 +54,7 @@ void log_event(FILE *log_file, const char *path, const char *event_desc, int is_
     fflush(log_file);
 }
 
-// 从配置文件读取多个要监控的目录路径
+// 从配置文件读取多个要监控的目录路径和日志保留天数
 int read_config(char directories[MAX_WATCHES][PATH_MAX]) {
     FILE *config_file = fopen(CONFIG_FILE, "r");
     if (!config_file) {
@@ -73,10 +77,53 @@ int read_config(char directories[MAX_WATCHES][PATH_MAX]) {
                 return -1;
             }
         }
+
+        // 解析 "log_retention_days=" 配置
+        if (strncmp(line, "log_retention_days=", 19) == 0) {
+            log_retention_days = atoi(line + 19);  // 读取日志保留天数
+        }
     }
 
     fclose(config_file);
     return 0;
+}
+
+// 删除超过指定天数的日志文件
+void clean_old_logs() {
+    DIR *dir;
+    struct dirent *entry;
+    char file_path[PATH_MAX];
+    struct stat file_stat;
+    time_t now = time(NULL);
+    double seconds_in_days = log_retention_days * 24 * 3600;
+
+    // 打开日志目录
+    if ((dir = opendir(LOG_DIR)) == NULL) {
+        perror("opendir");
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        // 只处理以 "_log.csv" 结尾的文件
+        if (strstr(entry->d_name, "_log.csv")) {
+            snprintf(file_path, sizeof(file_path), "%s/%s", LOG_DIR, entry->d_name);
+            
+            // 获取文件的状态信息
+            if (stat(file_path, &file_stat) == 0) {
+                // 判断文件是否超过指定天数
+                if (difftime(now, file_stat.st_mtime) > seconds_in_days) {
+                    printf("Deleting old log file: %s\n", file_path);
+                    if (remove(file_path) != 0) {
+                        perror("Error deleting file");
+                    }
+                }
+            } else {
+                perror("stat");
+            }
+        }
+    }
+
+    closedir(dir);
 }
 
 int main() {
@@ -84,7 +131,7 @@ int main() {
     char buffer[EVENT_BUF_LEN];
     FILE *log_file = NULL;
 
-    // 从配置文件中读取要监控的多个目录
+    // 从配置文件中读取要监控的多个目录和日志保留天数
     if (read_config(directories) != 0) {
         fprintf(stderr, "Failed to read configuration. Exiting...\n");
         return 1;
@@ -142,6 +189,10 @@ int main() {
         // 每5分钟切换一个日志文件
         if (difftime(current_time, start_time) >= log_interval) {
             fclose(log_file);
+
+            // 清理超过指定天数的日志文件
+            clean_old_logs();
+
             get_time_string(log_filename, sizeof(log_filename));
             strcat(log_filename, "_log.csv");
             log_file = fopen(log_filename, "w");
